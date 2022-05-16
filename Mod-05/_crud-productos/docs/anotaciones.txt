@@ -1,0 +1,198 @@
+MULTER
+multer es un set de funciones de node.
+El objetivo es subir archivos del cliente al servidor
+
+1)LO INSTALAMOS: npm install --save multer
+2)LO REQUERIMOS: const multer  = require('multer')
+3)SETUP:
+
+const storage = multer.diskStorage({        //diskStorage nos permite configurar el disco de almacenamiento donde vamos a subir el archivo. DisckStorage tiene 2 propiedades( destination y filename)
+  destination: function (req, file, cb) {   //DESTINATION (tiene 3 propiedades: reques, el file q estoy subiendo y un callback que se encarga de subir la img)
+    cb(null, '/tmp/my-uploads')             //el primer argumento q recibe siempre es "null" y el segundo va a ser el lugar donde quiero almacenar los archivos
+  },                                          
+  filename: function (req, file, cb) {         //el nombre que le voy a querer poner a la img que estoy subiendo 
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix)
+  }
+})
+const upload = multer({ storage: storage })
+
+4)CONFIGURAMOS EL FORMULARIO:
+
+en el formulario de creacion de un producto, agregamos: enctype="multipart/form-data"
+Con enctype (tipo de encriptacion) avisamos que va a ir info no solo de tipo texto, sino info de multiples partes, y una de esa es data
+que viene de un formulario. Entonces el request que estoy mandando al servidor se prepara para recibir informacion como archivos ademas de tipo texto
+SIEMPRE QUE QUERRAMOS QUE UN FORMULARIO ENVIE ARCHIVOS AL SERVIDOR AGREGAMOS LUEGO DEL METODO: "enctype="multipart/form-data".
+
+5) Seguimos en el formulario y agregamos un campito para poner una img:
+        <div class="col-12 col-md-6">
+					<label class="form-label">Subir una imagen:</label>
+					<input type="file" name="productImage">
+				</div>
+
+6)Vamos a ROUTES-->products.js Y en la ruta de CREATE ONE PRODUCT 
+agregamos upload.single("nombre que le pusimos en el formulario"):
+router.post('/', upload.single("productImage"), productsController.store);
+
+El objeto upload tiene varios metodos, usamos single porque el usuario va a subir 1 solor archivo, para reviar otros: 
+https://www.npmjs.com/package/multer
+
+
+7) Si cargamos un nuevo porducto en el formulario nos traia este error:
+Error: ENOENT: no such file or directory, open 'C:\public\uploads\productImage-1646162174500-31262752'
+Para eso declaramos y requerimos 'path' en routes/products:
+const path= require('path');
+
+8) En la const storage, usamos a path:
+(...)
+cb(null, path.resolve(__dirname,'public/uploads')
+(...)
+
+9)Nos tira el sgte error: xD
+Error: ENOENT: no such file or directory, open 'C:\Users\cotom\OneDrive\Escritorio\Repo-de-Javi\tn-30-2021\Mod-05\_crud-productos\routes\public\uploads\productImage-1646162501357-935252331'
+
+Se generó una ruta pero esta mal: aparece la carpeta public adentro de la routes :O
+
+cb(null, path.resolve(__dirname,'../public/uploads')
+(__dirname significa: De la ubicacion del archivo products en la carpeta routes) voy para atras, a la carpeta public y a uploads
+
+10) Me sigue tirando el error: 
+Error: ENOENT: no such file or directory, open 'C:\Users\cotom\OneDrive\Escritorio\Repo-de-Javi\tn-30-2021\Mod-05\_crud-productos\public\uploads\productImage-1646162794403-261716024'
+porque estoy tratando de subir una img a una carpeta q no existe. Si la carpeta uploads no aparece automaticamente cuando ejecutamos multer la creamos a mano 
+
+11) ahora si! se subio el archivo pero no se ve la img
+
+12) Dentro de multerDiskStorage, en filename agrergamos:
+
+filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)//para q el nombre de la img sea dinamico y no se pise cuando se carga una tras otra
+                          //la fecha de hoy      //con math...generamos un numero aleatorio en una DB
+      cb(null, uniqueSuffix + file.fieldname);     
+    }
+
+13)  Al filename  le agrego la extension, para eso concateno y uso la funcion de path:
+(...)
+   cb(null,     uniqueSuffix                           +      file.fieldname       +   path.extname(file.originalname)); //le pido de file el original name**
+           //me da todo el numero random de arriba    // me da el 'productImage'      //lo que esta justo arriba me da el .jpg
+
+   ** si hacemos un console.log(file), el original name figura por consola con el nombre de la img.jpg o su extension
+
+14) Hasta aca las imagenes se van guardando, ahora, en mi base de datos necesito guardar el nombre de la imagen. Si veo en data-->productsDataBase.json:
+Todos los productos que guarde aparecen con: 
+"image": "default-image.png"
+
+Vamos a CONTROLLERS/PRODUCTSCONTROLLERS:
+
+y ponemos: 
+store: (req, res) => {
+		res.json({
+			body:req.body,
+			file: req.file
+
+		})
+Esto simplemente es para ver cómo Multer divide la informacion:
+
+{
+"body": {
+"name": "the child",
+"price": "800",
+"discount": "12",
+"category": "in-sale",
+"description": "lorem"
+},
+
+"file": {
+"fieldname": "productImage",
+"originalname": "theChild.jfif",
+"encoding": "7bit",
+"mimetype": "image/jpeg",
+"destination": "C:\\Users\\cotom\\OneDrive\\Escritorio\\Repo-de-Javi\\tn-30-2021\\Mod-05\\_crud-productos\\public\\uploads",
+"filename": "1646173084899-760646825_productImage.jfif",
+"path": "C:\\Users\\cotom\\OneDrive\\Escritorio\\Repo-de-Javi\\tn-30-2021\\Mod-05\\_crud-productos\\public\\uploads\\1646173084899-760646825_productImage.jfif",
+"size": 5272
+}
+}
+
+En el body va solo texto y en el file va el archivo:
+req.file: aca viene la info de la img que se guardó
+req.body: aca viene la info de los campos del formulario
+
+15) en controllers, en products.push, justamente para subir info, antes se veia asi:
+products.push({
+			id: generateID(), // Así generamos el ID de manera dinámica
+			name: req.body.name,
+			price: req.body.price,
+			discount: req.body.discount,
+			category: req.body.category,
+			description: req.body.description,
+			image: 'default-image.png', // como aún no sabemos subir archivos, dejamos para todos los productos nuevos esta imagen default
+		})
+
+    Ahora cambiamos en image:
+    products.push({
+			id: generateID(), // Así generamos el ID de manera dinámica
+			name: req.body.name,
+			price: req.body.price,
+			discount: req.body.discount,
+			category: req.body.category,
+			description: req.body.description,
+			image: req.file.filename  //filename es el nombre random que habiamos armado anteriormente
+		})
+
+    Y cuando cargamos la img, ahora cambia el nombre en image:
+
+ANTES:
+ {
+  "id": 23,
+  "name": "the child",
+  "price": "800",
+  "discount": "12",
+  "category": "in-sale",
+  "description": "lorem",
+  "image": "default-image.png" <--------------------------------------------
+ },
+
+
+AHORA:
+
+ {
+  "id": 24,
+  "name": "Jabba",
+  "price": "3000",
+  "discount": "3",
+  "category": "visited",
+  "description": "Bring me Solo and the wookie",
+  "image": "1646173907434-672861097_productImage.jfif"  <-------------------------------------
+ }
+
+
+
+ 16) en el ejs de products (en views) Cambiamos la ruta de la imagen indicando la carpeta uploads:
+
+ 		<div class="col-12 col-sm-6 col-lg-3">
+					<section class="product-box">
+						<a href="/products/detail/<%= productsList[i].id %>">
+							<figure class="product-box_image">
+								<img src="/uploads/<%= productsList[i].image %>" alt="imagen de producto"><!--indico que las img las saque de la carpeta que cree, uploads-->
+							</figure>
+							<article class="product-box_data">
+								<h2><%= productsList[i].price %></h2>
+								<span><%= productsList[i].discount %> % OFF</span>
+								<p><%= productsList[i].name %></p>
+								<i class="fas fa-truck"></i>
+							</article>
+						</a>
+					</section>
+				</div>
+
+
+17) en productsControllers:
+En:
+products.push({
+		(...)
+			image: req.file? req.file.filename: "default-image.png" 
+
+			     Indicamos con eso que si llega req.file va la img, si no llega req.file, mandale la foto de default image"
+		})
+
+    ♥ 
